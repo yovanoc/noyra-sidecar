@@ -1,0 +1,51 @@
+[package]
+name = "noyra-sidecar"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+# Tokio: smallest possible feature set.
+#   net      — TcpListener / TcpStream
+#   io-util  — AsyncReadExt / AsyncWriteExt / io::split
+#   rt       — runtime::Builder, spawn
+#   macros   — tokio::select!
+#   signal   — SIGHUP for cert reload
+#   sync     — watch::channel for hot-reload distribution
+# (NOT needed: time, fs, rt-multi-thread, process, parking_lot, tracing.)
+tokio = { version = "1", default-features = false, features = [
+  "net",
+  "io-util",
+  "rt",
+  "macros",
+  "signal",
+  "sync",
+] }
+
+# tokio-rustls / rustls: TLS 1.2 only, ring crypto. Bare minimum.
+tokio-rustls = { version = "0.26", default-features = false, features = [
+  "tls12",
+] }
+rustls = { version = "0.23", default-features = false, features = [
+  "std",
+  "tls12",
+  "ring",
+] }
+rustls-pemfile = "2"
+
+# Direct libc dep for setrlimit + madvise (RAM-shaving syscalls). Already a
+# transitive dep via mio/tokio/etc., so no new code in the binary.
+[target.'cfg(unix)'.dependencies]
+libc = { version = "0.2", default-features = false }
+
+[profile.release]
+opt-level = "z"        # optimize for size
+lto = "fat"            # cross-crate inlining + dead-code elimination
+codegen-units = 1      # single CGU → maximum LTO opportunity
+panic = "abort"        # no unwinding tables
+                       # (nightly: -Cpanic=immediate-abort via .cargo/config.toml)
+strip = "symbols"      # drop symbol table from final binary
+incremental = false    # disable incremental codegen units
+debug = 0              # no debug info
+overflow-checks = false
+debug-assertions = false
+rpath = false

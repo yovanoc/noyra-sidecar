@@ -1,0 +1,53 @@
+# Build-std: rebuild std/core/alloc with the same release profile so unused
+# stdlib code is dead-stripped. Requires nightly toolchain.
+#
+# Build with:
+#   cargo build --release --target <host-triple>
+#
+# `--target` is REQUIRED to trigger -Zbuild-std even when targeting the host.
+
+[unstable]
+build-std = ["std", "panic_abort"]
+
+# ---- common rustflags (applies to ALL targets unless overridden) -------------
+#
+# -Zunstable-options       allow unstable -C flags below
+# -Cpanic=immediate-abort  replace every panic codegen with a bare ud2 / abort,
+#                          dropping panic message formatting from the binary
+#
+# Notes on flags we tried but DROPPED:
+#   -Zlocation-detail=none   bloated the binary by ~300 KB on this project (it
+#                            disables some inlining that build-std + immediate
+#                            abort otherwise apply).
+#   -Zfmt-debug=none         risk of breaking Debug impls in error paths.
+[build]
+rustflags = [
+  "-Zunstable-options",
+  "-Cpanic=immediate-abort",
+]
+
+# Cargo does NOT merge target rustflags with build.rustflags — target overrides
+# completely. So Linux entries must repeat the common flags + add linker args.
+
+# ---- Linux musl (production deploy target) ----------------------------------
+# --gc-sections : drop unreferenced ELF sections.
+# -Wl,-s        : strip symbol table.
+# (--icf=safe was DROPPED — interacts badly with -static-pie on musl.)
+[target.x86_64-unknown-linux-musl]
+rustflags = [
+  "-Zunstable-options",
+  "-Cpanic=immediate-abort",
+  "-Clink-arg=-Wl,--gc-sections",
+  "-Clink-arg=-Wl,-s",
+]
+
+[target.aarch64-unknown-linux-musl]
+rustflags = [
+  "-Zunstable-options",
+  "-Cpanic=immediate-abort",
+  "-Clink-arg=-Wl,--gc-sections",
+  "-Clink-arg=-Wl,-s",
+]
+
+# macOS ld64 already does dead_strip in release with `strip = "symbols"`,
+# so no extra link args needed; build.rustflags applies as-is.
